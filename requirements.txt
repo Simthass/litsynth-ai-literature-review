@@ -1,0 +1,24 @@
+# Core ADK and Gemini Dependencies
+google-genai==1.9.0
+google-adk==0.1.0
+
+# PDF Processing
+PyPDF2==3.0.1
+pymupdf==1.24.5
+
+# HTTP Requests & Web Scraping
+requests==2.31.0
+urllib3==2.2.1
+
+# Data Processing & Analysis
+python-dotenv==1.0.1
+
+# Testing (Optional but recommended for bonus points)
+pytest==8.1.1
+pytest-asyncio==0.23.6
+
+# Logging & Observability
+colorlog==6.8.2
+
+# Type Hints & Code Quality
+typing-extensions==4.11.0
