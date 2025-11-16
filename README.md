@@ -51,7 +51,7 @@ MIT License (TBD)
 
 ## 👨‍💻 Author
 
-Built for the AI Agents Intensive Course - December 2024
+Built for the AI Agents Intensive Course - November 2025
 
 ---
 
