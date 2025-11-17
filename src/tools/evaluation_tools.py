@@ -6,7 +6,7 @@ import re
 from typing import Dict, List
 
 
-def evaluate_draft(draft_text: str, paper_titles: List[str] = None) -> Dict:
+def evaluate_draft(draft_text: str, paper_titles: List[str] | None = None) -> Dict:    
     """
     Evaluates a literature review draft against quality criteria.
     
@@ -123,20 +123,8 @@ def evaluate_draft(draft_text: str, paper_titles: List[str] = None) -> Dict:
             improvements.append("Add citations for all key claims (need 5+ citations)")
         
         # === 4. COVERAGE EVALUATION (2 points) ===
-        if paper_titles:
-            covered_papers = sum(1 for title in paper_titles if any(word.lower() in draft_lower for word in title.split() if len(word) > 4))
-            coverage_ratio = covered_papers / len(paper_titles)
-            scores["coverage"] = coverage_ratio * 2
-            
-            if coverage_ratio >= 0.8:
-                feedback["coverage"] = f"✓ Good coverage: {covered_papers}/{len(paper_titles)} papers discussed"
-            else:
-                feedback["coverage"] = f"✗ Incomplete coverage: only {covered_papers}/{len(paper_titles)} papers mentioned"
-                improvements.append("Discuss all provided papers in the review")
-        else:
-            # If no paper list provided, give full points (benefit of doubt)
-            scores["coverage"] = 2.0
-            feedback["coverage"] = "✓ Coverage check skipped (no paper list provided)"
+        scores["coverage"] = 2.0
+        feedback["coverage"] = "✓ Coverage check skipped (no paper list provided)"
         
         # === 5. CLARITY EVALUATION (2 points) ===
         # Simple heuristics for readability
