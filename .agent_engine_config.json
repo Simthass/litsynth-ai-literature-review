@@ -1,0 +1,26 @@
+{
+  "app_name": "litsynth",
+  "display_name": "LitSynth Literature Review Agent",
+  "description": "AI-powered multi-agent system for automated academic literature reviews",
+  "agent_service_config": {
+    "max_retries": 3,
+    "max_agent_iterations": 10
+  },
+  "model_inference_config": {
+    "model": "gemini-2.0-flash-exp",
+    "max_output_tokens": 8192,
+    "temperature": 0.1
+  },
+  "session_config": {
+    "session_service_type": "IN_MEMORY",
+    "ttl_seconds": 3600
+  },
+  "events_compaction_config": {
+    "max_events": 50,
+    "strategy": "SUMMARIZE"
+  },
+  "observability_config": {
+    "enabled": true,
+    "log_level": "INFO"
+  }
+}
