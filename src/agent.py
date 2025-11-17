@@ -4,10 +4,12 @@ This is the main entry point that coordinates all the AI agents
 """
 
 import os
+import json
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from google.adk import Agent, Runner
+from google.adk.agents import ParallelAgent, LoopAgent
 from google.adk.sessions import InMemorySessionService, Session
 from google.adk.tools.google_search_tool import google_search
 
@@ -100,6 +102,52 @@ refinement_agent = Agent(
 
 print("✓ RefinementAgent ready - will evaluate and improve the draft")
 
+# ============================================================================
+# AGENT 5: PARALLEL PAPER PROCESSOR (ParallelAgent)
+# ============================================================================
+
+# This agent spawns multiple PaperAnalyzerAgents to process papers concurrently
+parallel_paper_processor = ParallelAgent(
+    name="ParallelPaperProcessor",
+    model=MODEL_NAME,
+    instruction="""You coordinate parallel analysis of multiple academic papers.
+
+You will receive a JSON array of papers from PaperDiscoveryAgent.
+For each paper, spawn a PaperAnalyzerAgent to analyze it.
+All papers will be processed simultaneously (in parallel).
+
+Return a summary of all paper analyses.""",
+    agents=[paper_analyzer_agent],  # This agent will be cloned for each paper
+)
+
+print("✓ ParallelPaperProcessor initialized")
+
+# ============================================================================
+# AGENT 6: REFINEMENT LOOP (LoopAgent)
+# ============================================================================
+
+# This agent iteratively refines the literature review until quality >= 8/10
+refinement_loop = LoopAgent(
+    name="RefinementLoop",
+    model=MODEL_NAME,
+    instruction="""You are the Quality Assurance Specialist for literature reviews.
+
+LOOP PROCESS:
+1. Receive a draft literature review
+2. Use the evaluate_draft tool to assess quality (returns score 1-10)
+3. If score >= 8.0: Return the final draft with "APPROVED" prefix
+4. If score < 8.0: 
+   - Analyze the feedback from evaluate_draft
+   - Rewrite the draft to address all issues
+   - Loop back to step 2
+
+Maximum 3 iterations. Always improve based on specific feedback.""",
+    tools=[evaluate_draft],
+    max_iterations=3,
+)
+
+print("✓ RefinementLoop initialized")
+
 
 # ============================================================================
 # ORCHESTRATION: BUILD THE MULTI-AGENT SYSTEM
@@ -141,74 +189,180 @@ def create_research_coordinator():
 
 def run_literature_review(topic: str):
     """
-    Runs a complete literature review for the given topic.
-    This is where the magic happens - all agents work together here.
+    Executes a complete literature review for the given topic.
+    Uses the full multi-agent pipeline.
     """
     print(f"\n{'='*60}")
     print(f"🔍 Starting Literature Review on: {topic}")
     print(f"{'='*60}\n")
     
-    print("📊 Phase 1: Finding relevant papers...")
-    
-    # Set up the runner that will execute our discovery agent
-    discovery_runner = Runner(
-        agent=paper_discovery_agent,
-        session_service=session_service,
-        app_name="LitSynth"
-    )
-    
-    # Session setup - keeps track of the conversation
-    session_id = "discovery_session_1"
+    # Create unique session
+    session_id = f"litsynth_{topic.replace(' ', '_')[:20]}"
     user_id = "default_user"
     
-    # Create a new session for this research task
+    # Initialize session
     session_service.create_session(
         app_name="LitSynth",
         user_id=user_id,
         session_id=session_id
     )
     
-    # Build the search prompt for the discovery agent
-    discovery_prompt = f"Find 5 highly relevant academic papers about: {topic}. Return the results as a JSON array with title, authors, year, venue, and URL for each paper."
+    # ========================================================================
+    # PHASE 1: PAPER DISCOVERY
+    # ========================================================================
+    print("📊 Phase 1: Discovering relevant papers...")
     
-    # Create the message object that the agent expects
+    discovery_runner = Runner(
+        agent=paper_discovery_agent,
+        session_service=session_service,
+        app_name="LitSynth"
+    )
+    
+    discovery_prompt = f"Find 5 highly relevant academic papers about: {topic}. Return ONLY a JSON array with title, authors, year, venue, and URL for each paper."
+    
     user_message = types.Content(
         parts=[types.Part(text=discovery_prompt)],
         role="user"
     )
     
-    # Run the discovery agent and capture the results
     events = discovery_runner.run(
         user_id=user_id,
         session_id=session_id,
         new_message=user_message
     )
     
-    # Process the agent's response - collect all the text it generates
-    response_text = ""
-    print("\n🔄 Processing agent response...\n")
-    
+    papers_json = ""
     for event in events:
-        # Check what type of event we're dealing with
-        event_type = type(event).__name__
-        
-        # Look for text content in the event
         if hasattr(event, 'content') and event.content:
             for part in event.content.parts:
                 if hasattr(part, 'text') and part.text:
-                    response_text += part.text
-                    print(part.text)  # Show progress as we get responses
+                    papers_json += part.text
+    
+    print(f"✅ Found papers!\n")
+    
+    # Parse the JSON
+    try:
+        # Extract JSON from markdown code blocks if present
+        if "```json" in papers_json:
+            papers_json = papers_json.split("```json")[1].split("```")[0].strip()
+        elif "```" in papers_json:
+            papers_json = papers_json.split("```")[1].split("```")[0].strip()
         
-        # Some events might have text directly
-        elif hasattr(event, 'text') and event.text:
-            response_text += event.text
-            print(event.text)
+        papers = json.loads(papers_json)
+        print(f"📄 Discovered {len(papers)} papers")
+    except json.JSONDecodeError:
+        print("⚠️  JSON parsing failed, using mock data for demo")
+        papers = [
+            {"title": "Attention Is All You Need", "authors": ["Vaswani et al."], "year": 2017, "url": "https://arxiv.org/pdf/1706.03762.pdf"}
+        ]
     
-    print("\n✅ Paper Discovery Complete!")
-    print("\nDiscovered Papers Summary:")
-    print(response_text if response_text else "No papers found (might need to adjust the search prompt)")
+    # ========================================================================
+    # PHASE 2: SYNTHESIS (Simplified for now - skip parallel processing)
+    # ========================================================================
+    print(f"\n📝 Phase 2: Synthesizing literature review...")
     
-    return response_text
+    synthesis_runner = Runner(
+        agent=synthesis_agent,
+        session_service=session_service,
+        app_name="LitSynth"
+    )
+    
+    # Create new session for synthesis
+    synthesis_session_id = f"{session_id}_synthesis"
+    session_service.create_session(
+        app_name="LitSynth",
+        user_id=user_id,
+        session_id=synthesis_session_id
+    )
+    
+    synthesis_prompt = f"""Create a literature review draft based on these papers:
+
+{json.dumps(papers, indent=2)}
+
+Write a structured literature review with:
+- Introduction (context of {topic})
+- Major Themes
+- Key Findings
+- Research Gaps
+- Conclusion
+
+Include citations in (Author, Year) format. Aim for 1000-1500 words."""
+    
+    synthesis_message = types.Content(
+        parts=[types.Part(text=synthesis_prompt)],
+        role="user"
+    )
+    
+    events = synthesis_runner.run(
+        user_id=user_id,
+        session_id=synthesis_session_id,
+        new_message=synthesis_message
+    )
+    
+    draft_text = ""
+    for event in events:
+        if hasattr(event, 'content') and event.content:
+            for part in event.content.parts:
+                if hasattr(part, 'text') and part.text:
+                    draft_text += part.text
+                    print(part.text[:200] + "..." if len(part.text) > 200 else part.text)
+    
+    print(f"\n✅ Draft created ({len(draft_text.split())} words)")
+    
+    # ========================================================================
+    # PHASE 3: REFINEMENT LOOP
+    # ========================================================================
+    print(f"\n🔄 Phase 3: Iterative refinement...")
+    
+    refinement_runner = Runner(
+        agent=refinement_loop,
+        session_service=session_service,
+        app_name="LitSynth"
+    )
+    
+    # Create session for refinement
+    refinement_session_id = f"{session_id}_refinement"
+    session_service.create_session(
+        app_name="LitSynth",
+        user_id=user_id,
+        session_id=refinement_session_id
+    )
+    
+    refinement_prompt = f"""Evaluate and refine this literature review draft:
+
+{draft_text}
+
+Use the evaluate_draft tool to score it. If score < 8, improve it based on feedback and re-evaluate. Loop until score >= 8 or max 3 iterations."""
+    
+    refinement_message = types.Content(
+        parts=[types.Part(text=refinement_prompt)],
+        role="user"
+    )
+    
+    events = refinement_runner.run(
+        user_id=user_id,
+        session_id=refinement_session_id,
+        new_message=refinement_message
+    )
+    
+    final_review = ""
+    for event in events:
+        if hasattr(event, 'content') and event.content:
+            for part in event.content.parts:
+                if hasattr(part, 'text') and part.text:
+                    final_review += part.text
+    
+    print(f"\n✅ Refinement complete!")
+    
+    # ========================================================================
+    # FINAL OUTPUT
+    # ========================================================================
+    print(f"\n{'='*60}")
+    print(f"📚 FINAL LITERATURE REVIEW")
+    print(f"{'='*60}\n")
+    print(final_review[:500] + "..." if len(final_review) > 500 else final_review)
+    
+    return final_review
 
 if __name__ == "__main__":
     print("\n" + "="*60)
