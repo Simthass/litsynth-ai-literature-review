@@ -3,7 +3,7 @@ Citation extraction and formatting tools for LitSynth
 """
 
 from typing import List, Dict
-
+from datetime import datetime
 
 def extract_citation(
     title: str,
@@ -12,64 +12,43 @@ def extract_citation(
     venue: str = ""
 ) -> Dict:
     """
-    Generates a properly formatted citation in APA style.
-    
-    This tool is used by PaperAnalyzerAgent to create standardized citations
-    for academic papers that can be included in the literature review.
-    
-    Args:
-        title: Paper title
-        authors: List of author names (e.g., ["John Doe", "Jane Smith"])
-        year: Publication year
-        venue: Publication venue (journal/conference name)
-        
-    Returns:
-        dict: {
-            "status": "success",
-            "citation": "Formatted APA citation",
-            "bibtex": "BibTeX entry (optional)"
-        }
-    
-    Example:
-        >>> result = extract_citation(
-        ...     title="Attention Is All You Need",
-        ...     authors=["Ashish Vaswani", "Noam Shazeer"],
-        ...     year=2017,
-        ...     venue="NeurIPS"
-        ... )
-        >>> print(result["citation"])
-        "Vaswani, A., & Shazeer, N. (2017). Attention Is All You Need. NeurIPS."
+    Improved citation extraction with validation
     """
     try:
-        if not authors or len(authors) == 0:
-            return {
-                "status": "error",
-                "citation": None,
-                "message": "No authors provided"
-            }
+        # Validate metadata first
+        validated = validate_citation_metadata(title, authors, year, venue)
         
-        # Format authors in APA style
+        title = validated["validated_title"]
+        authors = validated["validated_authors"] 
+        year = validated["validated_year"]
+        venue = validated["validated_venue"]
+        
+        if validated["validation_issues"]:
+            print(f"Citation validation issues: {validated['validation_issues']}")
+        
+        # Format authors with improved function
         formatted_authors = format_authors_apa(authors)
         
-        # Build the citation
+        # Build citation
         citation_parts = [
             formatted_authors,
             f"({year})",
-            f"*{title}*"  # Italicized title in markdown
+            f"*{title}*"
         ]
         
-        if venue:
-            citation_parts.append(f"*{venue}*")  # Italicized venue
+        if venue and venue != "Unknown Venue":
+            citation_parts.append(f"*{venue}*")
         
         citation = ". ".join(citation_parts) + "."
         
-        # Generate BibTeX entry (bonus feature)
+        # Generate BibTeX
         bibtex = generate_bibtex(title, authors, year, venue)
         
         return {
             "status": "success",
             "citation": citation,
             "bibtex": bibtex,
+            "validation_issues": validated["validation_issues"],
             "message": "Citation generated successfully"
         }
         
@@ -84,38 +63,47 @@ def extract_citation(
 
 def format_authors_apa(authors: List[str]) -> str:
     """
-    Formats author names in APA style.
-    
-    Rules:
-    - One author: "LastName, F."
-    - Two authors: "LastName1, F., & LastName2, F."
-    - Three+ authors: "LastName1, F., LastName2, F., & LastName3, F."
-    
-    Args:
-        authors: List of full author names
-        
-    Returns:
-        str: Formatted author string
+    Improved author formatting with better error handling
     """
     def format_single_author(name: str) -> str:
-        """Convert 'First Last' to 'Last, F.'"""
+        """Convert 'First Last' to 'Last, F.' with robust parsing"""
+        if not name or name.strip() == "":
+            return "Unknown"
+            
         parts = name.strip().split()
+        
+        # Handle "et al." and other special cases
+        if "et al" in name.lower():
+            return "et al."
+            
+        # Handle single name (like "Unknown")
+        if len(parts) == 1:
+            return f"{parts[0]}."
+            
+        # Standard "First Last" format
         if len(parts) >= 2:
             last_name = parts[-1]
-            first_initial = parts[0][0].upper()
-            return f"{last_name}, {first_initial}."
-        else:
-            # If only one part, assume it's the last name
-            return f"{parts[0]}."
+            first_initial = parts[0][0].upper() + "."
+            return f"{last_name}, {first_initial}"
+            
+        return "Unknown"
+
+    if not authors or len(authors) == 0:
+        return "Unknown"
+        
+    # Filter out empty authors
+    valid_authors = [author for author in authors if author and author.strip()]
     
-    formatted = [format_single_author(author) for author in authors]
-    
+    if not valid_authors:
+        return "Unknown"
+        
+    formatted = [format_single_author(author) for author in valid_authors]
+
     if len(formatted) == 1:
         return formatted[0]
     elif len(formatted) == 2:
-        return f"{formatted[0]}, & {formatted[1]}"
+        return f"{formatted[0]} & {formatted[1]}"
     else:
-        # Three or more authors
         all_but_last = ", ".join(formatted[:-1])
         return f"{all_but_last}, & {formatted[-1]}"
 
@@ -175,3 +163,38 @@ if __name__ == "__main__":
     )
     print(f"\nTest 2 - Multiple Authors:")
     print(f"Citation: {result['citation']}")
+    
+def validate_citation_metadata(title: str, authors: List[str], year: int, venue: str) -> Dict:
+    """
+    Validate citation metadata before generating citation
+    """
+    issues = []
+    
+    if not title or len(title.strip()) < 5:
+        issues.append("Title too short or missing")
+        title = "Unknown Title"
+    
+    if not authors or len(authors) == 0:
+        issues.append("No authors provided")
+        authors = ["Unknown"]
+    else:
+        # Clean author list
+        authors = [author.strip() for author in authors if author and author.strip()]
+        if not authors:
+            authors = ["Unknown"]
+    
+    if not year or year < 1900 or year > 2030:
+        issues.append(f"Invalid year: {year}")
+        year = datetime.now().year  # Default to current year
+    
+    if not venue or len(venue.strip()) < 2:
+        issues.append("Venue missing or too short")
+        venue = "Unknown Venue"
+    
+    return {
+        "validated_title": title,
+        "validated_authors": authors,
+        "validated_year": year,
+        "validated_venue": venue,
+        "validation_issues": issues
+    }
