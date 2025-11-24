@@ -4,21 +4,25 @@ google-adk==0.1.0
 
 # PDF Processing
 PyPDF2==3.0.1
-pymupdf==1.24.5
+pymupdf==1.26.6
 
 # HTTP Requests & Web Scraping
-requests==2.31.0
-urllib3==2.2.1
+requests==2.32.3
+urllib3==2.2.3
 
 # Data Processing & Analysis
 python-dotenv==1.0.1
 
-# Testing (Optional but recommended for bonus points)
-pytest==8.1.1
-pytest-asyncio==0.23.6
+# Testing (Optional)
+pytest==8.3.3
+pytest-asyncio==0.23.7
 
 # Logging & Observability
 colorlog==6.8.2
+deprecated==1.2.14
 
 # Type Hints & Code Quality
-typing-extensions==4.11.0
+# typing-extensions
+# Core validation libraries
+pydantic==2.12.4
+pydantic-core==2.41.5
